@@ -52,6 +52,18 @@ Examples:
     create_worktree.sh feature-x -c --base origin/main
 ```
 
+## Hooks
+
+### hooks/install.sh
+Installs the native Git hooks by copying `hooks/pre-push` into the repository's `.git/hooks` directory. The script detects worktrees, installs into the main repository git dir, resets any custom `core.hooksPath`, and skips copying when the hook already matches. Run it after cloning or whenever the hook changes.
+
+```
+$ bash hooks/install.sh
+```
+
+### hooks/pre-push
+The native pre-push hook invoked by Git. It buffers the refs being pushed, gathers changed files, and runs the full validation suite in parallel using `npm run format`, `npm run lint`, `npm run check`, `npm run knip`, and `npm run test:unit`. Logs stream to `/tmp`, and failures open an interactive `less` viewer (or print logs when no TTY). All checks must pass before the push is allowed.
+
 ## Requirements
 - Bash 4+
 - GNU or BSD `find`

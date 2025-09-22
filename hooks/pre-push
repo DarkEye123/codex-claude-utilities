@@ -1,0 +1,386 @@
+#!/bin/sh
+
+# Native Git pre-push hook
+# Migrated from husky to native Git hooks
+# Runs comprehensive code validation before push
+
+# Normalize the remote name passed by Git so we can fall back gracefully when the
+# tracking remote is missing (e.g. pushing to a new remote).
+REMOTE_NAME="$1"
+
+if [ -z "$REMOTE_NAME" ]; then
+  REMOTE_NAME="origin"
+fi
+
+ZERO_COMMIT="0000000000000000000000000000000000000000"
+
+# Buffer stdin because Git streams remote refs through stdin only once; we need
+# to read them multiple times while building the pushed file list.
+PUSH_UPDATE_DATA=$(cat)
+
+PUSHED_FILES_FILE=$(mktemp)
+
+filter_worktrees_paths() {
+  local file="$1"
+  local tmp
+
+  tmp=$(mktemp)
+  awk '!/^worktrees\//' "$file" > "$tmp"
+  sort -u "$tmp" > "$file"
+  rm -f "$tmp"
+}
+
+if [ -n "$PUSH_UPDATE_DATA" ]; then
+  # Walk every ref that will be pushed and gather the files contained inside the
+  # commits that do not exist on the selected remote yet.
+  while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+    [ -z "$LOCAL_SHA" ] && continue
+
+    if [ "$LOCAL_SHA" = "$ZERO_COMMIT" ]; then
+      continue
+    fi
+
+    REV_LIST_FILE=$(mktemp)
+
+    # --remotes requires the remote to exist locally; if it does not, fall back
+    # to comparing against every remote ref to avoid false positives.
+    if git remote | grep -qx "$REMOTE_NAME"; then
+      git rev-list "$LOCAL_SHA" --not --remotes="$REMOTE_NAME" > "$REV_LIST_FILE"
+    else
+      git rev-list "$LOCAL_SHA" --not --glob=refs/remotes/* > "$REV_LIST_FILE"
+    fi
+
+    # Expand each commit into its touched files so we can compare later with the
+    # set of files changed by Prettier.
+    while read -r COMMIT_SHA; do
+      [ -z "$COMMIT_SHA" ] && continue
+      git diff-tree --no-commit-id --name-only -r "$COMMIT_SHA"
+    done < "$REV_LIST_FILE"
+
+    rm -f "$REV_LIST_FILE"
+  done <<EOF | sort -u > "$PUSHED_FILES_FILE"
+$PUSH_UPDATE_DATA
+EOF
+else
+  > "$PUSHED_FILES_FILE"
+fi
+
+filter_worktrees_paths "$PUSHED_FILES_FILE"
+
+# Capture the current working tree state before running Prettier so we can
+# spot any additional changes introduced by auto-formatting.
+PRE_FORMAT_DIFF_FILE=$(mktemp)
+
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  git diff --name-only HEAD | sort -u > "$PRE_FORMAT_DIFF_FILE"
+else
+  > "$PRE_FORMAT_DIFF_FILE"
+fi
+
+filter_worktrees_paths "$PRE_FORMAT_DIFF_FILE"
+
+FORMAT_PUSHED_FILES_CHANGED=0
+FORMAT_CHANGED_PUSHED_LOG=""
+FORMAT_NEW_CHANGES_FILE=""
+FORMAT_PUSHED_CHANGES_FILE=""
+
+echo "🚀 Running comprehensive pre-push validation..."
+
+# Step 1: Run all validation in parallel (format, lint, TypeScript, knip, unit tests)
+echo "📋 Step 1: Running format, lint, TypeScript check, knip, and unit tests in parallel..."
+
+# Generate timestamp for unique log files
+TIMESTAMP=$(date +%s)
+
+# Create unique log files for each validation step
+FORMAT_LOG="/tmp/format_output_$TIMESTAMP.log"
+ESLINT_LOG="/tmp/eslint_output_$TIMESTAMP.log"
+CHECK_LOG="/tmp/check_output_$TIMESTAMP.log"
+KNIP_LOG="/tmp/knip_output_$TIMESTAMP.log"
+TEST_LOG="/tmp/unit_test_output_$TIMESTAMP.log"
+
+# Run format with only changed files output, lint, check, knip, and tests in parallel
+npm run format > "$FORMAT_LOG" 2>&1 &
+FORMAT_PID=$!
+
+FORCE_COLOR=1 npm run lint > "$ESLINT_LOG" 2>&1 &
+ESLINT_PID=$!
+
+FORCE_COLOR=1 npm run check > "$CHECK_LOG" 2>&1 &
+CHECK_PID=$!
+
+FORCE_COLOR=1 npm run knip > "$KNIP_LOG" 2>&1 &
+KNIP_PID=$!
+
+# Run unit tests in background, capture output to show only on failure
+FORCE_COLOR=1 npm run test:unit > "$TEST_LOG" 2>&1 &
+TEST_PID=$!
+
+# Poll for parallel process completion with real-time progress indicators
+TOTAL_PROCESSES=5
+COMPLETED=0
+
+echo "⏳ Waiting for processes to complete... (0/$TOTAL_PROCESSES)"
+
+# Poll for completion - true parallel execution
+while [ $COMPLETED -lt $TOTAL_PROCESSES ]; do
+  # Check format process
+  if [ -n "$FORMAT_PID" ] && ! kill -0 $FORMAT_PID 2>/dev/null; then
+    wait $FORMAT_PID
+    FORMAT_RESULT=$?
+    FORMAT_PID=""
+
+    POST_FORMAT_DIFF_FILE=$(mktemp)
+
+    if git rev-parse --verify HEAD >/dev/null 2>&1; then
+      git diff --name-only HEAD | sort -u > "$POST_FORMAT_DIFF_FILE"
+    else
+      > "$POST_FORMAT_DIFF_FILE"
+    fi
+
+    filter_worktrees_paths "$POST_FORMAT_DIFF_FILE"
+
+    FORMAT_NEW_CHANGES_FILE=$(mktemp)
+    # comm -13 surfaces files that appear after formatting (column 3) and were
+    # not present before; we only care about brand new diffs created by Prettier.
+    comm -13 "$PRE_FORMAT_DIFF_FILE" "$POST_FORMAT_DIFF_FILE" > "$FORMAT_NEW_CHANGES_FILE"
+
+    FORMAT_PUSHED_CHANGES_FILE=$(mktemp)
+    # comm -12 intersects the Prettier-created files with the files actually in
+    # the push; if the intersection is not empty, we must block the push.
+    comm -12 "$PUSHED_FILES_FILE" "$FORMAT_NEW_CHANGES_FILE" > "$FORMAT_PUSHED_CHANGES_FILE"
+
+    if [ -s "$FORMAT_PUSHED_CHANGES_FILE" ]; then
+      FORMAT_PUSHED_FILES_CHANGED=1
+
+      if [ -z "$FORMAT_CHANGED_PUSHED_LOG" ]; then
+        FORMAT_CHANGED_PUSHED_LOG=$(mktemp)
+      fi
+
+      {
+        echo "Prettier formatting updated files that are part of this push:"
+        cat "$FORMAT_PUSHED_CHANGES_FILE"
+        echo ""
+        echo "Please add the files above to your commit (e.g. 'git add <file>' and amend) before pushing again."
+      } > "$FORMAT_CHANGED_PUSHED_LOG"
+    fi
+
+    rm -f "$POST_FORMAT_DIFF_FILE" "$FORMAT_NEW_CHANGES_FILE" "$FORMAT_PUSHED_CHANGES_FILE"
+
+    COMPLETED=$((COMPLETED + 1))
+    echo "✓ Code formatting completed ($COMPLETED/$TOTAL_PROCESSES)"
+  fi
+  
+  # Check eslint process
+  if [ -n "$ESLINT_PID" ] && ! kill -0 $ESLINT_PID 2>/dev/null; then
+    wait $ESLINT_PID
+    ESLINT_RESULT=$?
+    ESLINT_PID=""
+    COMPLETED=$((COMPLETED + 1))
+    echo "✓ ESLint check completed ($COMPLETED/$TOTAL_PROCESSES)"
+  fi
+  
+  # Check TypeScript process
+  if [ -n "$CHECK_PID" ] && ! kill -0 $CHECK_PID 2>/dev/null; then
+    wait $CHECK_PID
+    CHECK_RESULT=$?
+    CHECK_PID=""
+    COMPLETED=$((COMPLETED + 1))
+    echo "✓ TypeScript check completed ($COMPLETED/$TOTAL_PROCESSES)"
+  fi
+  
+  # Check knip process
+  if [ -n "$KNIP_PID" ] && ! kill -0 $KNIP_PID 2>/dev/null; then
+    wait $KNIP_PID
+    KNIP_RESULT=$?
+    KNIP_PID=""
+    COMPLETED=$((COMPLETED + 1))
+    echo "✓ Knip analysis completed ($COMPLETED/$TOTAL_PROCESSES)"
+  fi
+  
+  # Check unit test process
+  if [ -n "$TEST_PID" ] && ! kill -0 $TEST_PID 2>/dev/null; then
+    wait $TEST_PID
+    TEST_RESULT=$?
+    TEST_PID=""
+    COMPLETED=$((COMPLETED + 1))
+    echo "✓ Unit tests completed ($COMPLETED/$TOTAL_PROCESSES)"
+  fi
+  
+  # Brief sleep to avoid CPU spinning
+  [ $COMPLETED -lt $TOTAL_PROCESSES ] && sleep 0.1
+done
+
+# Check which processes failed and collect failure information
+FAILED_CHECKS=()
+FAILED_NAMES=()
+FAILED_LOGS=()
+
+if [ $FORMAT_RESULT -ne 0 ]; then
+  FAILED_CHECKS+=("format")
+  FAILED_NAMES+=("Code formatting")
+  FAILED_LOGS+=("$FORMAT_LOG")
+fi
+
+if [ $FORMAT_PUSHED_FILES_CHANGED -ne 0 ]; then
+  # Surface formatting side-effects as their own failure so contributors see a
+  # clear message explaining why the push is rejected even though formatting
+  # succeeded.
+  FAILED_CHECKS+=("format_changed_files")
+  FAILED_NAMES+=("Prettier created new changes")
+
+  if [ -n "$FORMAT_CHANGED_PUSHED_LOG" ]; then
+    FAILED_LOGS+=("$FORMAT_CHANGED_PUSHED_LOG")
+  else
+    FAILED_LOGS+=("$FORMAT_LOG")
+  fi
+fi
+
+if [ $ESLINT_RESULT -ne 0 ]; then
+  FAILED_CHECKS+=("eslint")
+  FAILED_NAMES+=("ESLint")
+  FAILED_LOGS+=("$ESLINT_LOG")
+fi
+
+if [ $CHECK_RESULT -ne 0 ]; then
+  FAILED_CHECKS+=("check")
+  FAILED_NAMES+=("TypeScript check")
+  FAILED_LOGS+=("$CHECK_LOG")
+fi
+
+if [ $KNIP_RESULT -ne 0 ]; then
+  FAILED_CHECKS+=("knip")
+  FAILED_NAMES+=("Knip analysis")
+  FAILED_LOGS+=("$KNIP_LOG")
+fi
+
+if [ $TEST_RESULT -ne 0 ]; then
+  FAILED_CHECKS+=("test")
+  FAILED_NAMES+=("Unit tests")
+  FAILED_LOGS+=("$TEST_LOG")
+fi
+
+TERMINAL_DEVICE=""
+if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+  TERMINAL_DEVICE=/dev/tty
+fi
+
+# Handle failures
+if [ ${#FAILED_CHECKS[@]} -eq 0 ]; then
+  echo "✅ All validation checks passed!"
+elif [ ${#FAILED_CHECKS[@]} -eq 1 ]; then
+  # Single failure - show directly
+  echo "❌ ${FAILED_NAMES[0]} failed. Please fix the issues and try again."
+  echo "Log location: ${FAILED_LOGS[0]}"
+  echo ""
+  echo -e "\033[0;90m💡 Tips: Use ↑/↓ or j/k to scroll, Space/b for pages, / to search, q to quit\033[0m"
+  echo ""
+  if [ -n "$TERMINAL_DEVICE" ]; then
+    exec < "$TERMINAL_DEVICE"
+    echo "Error log (press 'q' to quit):"
+    less -RF "${FAILED_LOGS[0]}"
+  else
+    echo "Interactive log viewer unavailable (no TTY detected). Printing log output below:"
+    cat "${FAILED_LOGS[0]}"
+  fi
+  exit 1
+else
+  # Multiple failures - show interactive menu
+  echo ""
+  echo "❌ Multiple validation checks failed:"
+  for i in "${!FAILED_NAMES[@]}"; do
+    echo "  • ${FAILED_NAMES[$i]} failed"
+  done
+  echo ""
+  # Create menu options
+  MENU_OPTIONS=()
+  for name in "${FAILED_NAMES[@]}"; do
+    MENU_OPTIONS+=("$name")
+  done
+  MENU_OPTIONS+=("Exit")
+
+  if [ -z "$TERMINAL_DEVICE" ]; then
+    echo "Interactive log menu unavailable (no TTY detected). Printing logs sequentially:"
+    for i in "${!FAILED_NAMES[@]}"; do
+      echo ""
+      echo "----- ${FAILED_NAMES[$i]} log (${FAILED_LOGS[$i]}) -----"
+      cat "${FAILED_LOGS[$i]}"
+      echo ""
+    done
+    exit 1
+  fi
+
+  exec < "$TERMINAL_DEVICE"
+
+  # Function to display the full menu header
+  display_menu_header() {
+    echo -e "\033[1;36m📁 Log files saved:\033[0m"
+    for i in "${!FAILED_LOGS[@]}"; do
+      echo "  ${FAILED_NAMES[$i]}: ${FAILED_LOGS[$i]}"
+    done
+    echo ""
+
+    echo -e "\033[0;90m💡 Log viewer tips:\033[0m"
+    echo -e "\033[0;90m   • Navigation: ↑/↓ arrows or j/k to scroll line by line\033[0m"
+    echo -e "\033[0;90m   • Page navigation: Space (forward) / b (backward)\033[0m"
+    echo -e "\033[0;90m   • Search: / to search forward, ? to search backward (regex supported)\033[0m"
+    echo -e "\033[0;90m   • Jump: g (start of file), G (end of file)\033[0m"
+    echo -e "\033[0;90m   • Exit: press 'q' to quit and return to menu\033[0m"
+    echo ""
+
+    echo -e "\033[1;36m📋 Please select which error log to view (or type 'q' to quit):\033[0m"
+  }
+
+  # Function to display menu options (only used when returning from less)
+  display_menu_options() {
+    for j in "${!MENU_OPTIONS[@]}"; do
+      echo "$((j+1))) ${MENU_OPTIONS[$j]}"
+    done
+  }
+
+  # Display initial menu header
+  display_menu_header
+
+  select choice in "${MENU_OPTIONS[@]}"; do
+    if [ "$REPLY" = "q" ] || [ "$REPLY" = "Q" ]; then
+      echo "Exiting. Please fix the validation issues before pushing."
+      break
+    elif [ "$choice" = "Exit" ]; then
+      echo "Exiting. Please fix the validation issues before pushing."
+      break
+    elif [ -n "$choice" ]; then
+      for i in "${!FAILED_NAMES[@]}"; do
+        if [ "${FAILED_NAMES[$i]}" = "$choice" ]; then
+          echo ""
+          echo "Viewing $choice error log (press 'q' to return to menu):"
+          echo "Log location: ${FAILED_LOGS[$i]}"
+          echo ""
+          less -R "${FAILED_LOGS[$i]}"
+
+          if command -v clear >/dev/null 2>&1; then
+            clear
+          fi
+          display_menu_header
+          display_menu_options
+          break
+        fi
+      done
+    else
+      echo "Invalid selection. Please try again."
+    fi
+  done
+
+  exit 1
+fi
+
+
+echo ""
+echo "🎉 All pre-push validation checks passed!"
+echo "   ✅ Code formatting"
+echo "   ✅ Linting (ESLint)"  
+echo "   ✅ TypeScript compilation"
+echo "   ✅ Unit tests"
+echo "   ✅ Unused code/dependency detection (knip)"
+echo ""
+
+exit 0
