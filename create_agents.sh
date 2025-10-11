@@ -34,7 +34,7 @@ Examples:
 USAGE
 }
 
-ROOT_DIR="."
+ROOT_DIR=$(pwd)
 EXCLUDES=()
 
 while (($#)); do
