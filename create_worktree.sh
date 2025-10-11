@@ -187,6 +187,14 @@ $(find . -maxdepth 1 -name ".env*" -type f | sort)
 EOF
 echo "Copied $ENV_COUNT .env file(s)."
 
+echo -e "\nINFO: Running create_agents.sh for created worktree..."
+./create_agents.sh "$(pwd)/$WORKTREE_PATH"
+AGENTS_MD_PATH="$(pwd)/$WORKTREE_PATH/AGENTS.md"
+if [[ ! -f "$AGENTS_MD_PATH" ]]; then
+    echo "${C_RED}ERROR:${C_RESET} AGENTS.md not found at $AGENTS_MD_PATH" >&2
+fi
+echo -e "INFO: create_agents.sh completed.\n"
+
 NODE_MODULES_COPIED=false
 if [[ "$COPY_NODE_MODULES" == "true" ]]; then
     if [[ -d "./node_modules" ]]; then
@@ -213,4 +221,5 @@ echo "Env files copied: $ENV_COUNT"
 echo "node_modules copied: $NODE_MODULES_COPIED"
 echo
 echo "Next: cd $WORKTREE_PATH"
+echo "VSCode: code $WORKTREE_PATH"
 echo "Remove later: git worktree remove $WORKTREE_PATH"
