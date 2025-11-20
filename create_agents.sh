@@ -70,9 +70,9 @@ if [ ${#EXCLUDES[@]} -gt 0 ]; then
   FIND_ARGS+=( ")" -prune -o )
 fi
 
-FIND_ARGS+=( -type f -name 'CLAUDE.md' -exec sh -c 'src="$1"; dir="${src%/*}"; cp -f "$src" "$dir/AGENTS.md"' sh {} \; )
+FIND_ARGS+=( -type f -name 'CLAUDE.md' -exec sh -c 'src="$1"; dir="${src%/*}"; for target in AGENTS.md GEMINI.md; do cp -f "$src" "$dir/$target"; done' sh {} \; )
 
 # Execute single find invocation
 find "${FIND_ARGS[@]}"
 
-echo "AGENTS.md files created/updated for all CLAUDE.md files under: $ROOT_DIR"
+echo "AGENTS.md and GEMINI.md files created/updated for all CLAUDE.md files under: $ROOT_DIR"

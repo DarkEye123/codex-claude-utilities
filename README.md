@@ -5,7 +5,7 @@ Bash helpers that automate common repository maintenance tasks.
 ## Scripts
 
 ### create_agents.sh
-Copies every `CLAUDE.md` discovered under a root directory and writes a sibling `AGENTS.md` with identical contents. Uses a single `find` invocation and supports repeatable exclude patterns.
+Copies every `CLAUDE.md` discovered under a root directory and writes sibling `AGENTS.md` and `GEMINI.md` files with identical contents. Uses a single `find` invocation and supports repeatable exclude patterns.
 
 ```
 $ bash create_agents.sh --help
