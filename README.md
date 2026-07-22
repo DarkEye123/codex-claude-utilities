@@ -2,6 +2,14 @@
 
 Bash helpers for managing worktrees, Git hooks, and repository housekeeping.
 
+## Use as a submodule
+
+Repository: `git@github.com:DarkEye123/codex-claude-utilities.git`
+
+```bash
+git submodule add git@github.com:DarkEye123/codex-claude-utilities.git utilities/codex-claude-utilities
+```
+
 ## Scripts
 
 ### create_agents.sh
