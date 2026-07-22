@@ -5,20 +5,22 @@ Bash helpers for managing worktrees, Git hooks, and repository housekeeping.
 ## Scripts
 
 ### create_agents.sh
-Finds every `CLAUDE.md` under a root directory and copies it to sibling `AGENTS.md` and `GEMINI.md` files. The script uses a single `find` invocation and supports repeatable exclude patterns.
+Finds every selected instruction file under a root directory and symbolically links the other two names to it. `AGENTS.md` is the default target; use `--target` to select `CLAUDE.md` or `GEMINI.md`. The script uses a single `find` invocation, always excludes `node_modules`, and supports repeatable additional exclude patterns.
 
 ```
 $ bash create_agents.sh --help
-Usage: create_agents.sh [--exclude <pattern>]... [root]
+Usage: create_agents.sh [--target <file>] [--exclude <pattern>]... [root]
 
 Options:
-  -x, --exclude <pattern>   Exclude paths matching pattern (repeatable)
+  -t, --target <file>      Target file: AGENTS.md, CLAUDE.md, or GEMINI.md (default: AGENTS.md)
+  -x, --exclude <pattern>   Exclude additional paths matching pattern (repeatable)
   -h, --help                Show this help and exit
 
 Examples:
   create_agents.sh
+  create_agents.sh --target CLAUDE.md
   create_agents.sh --exclude worktrees
-  create_agents.sh -x worktrees -x node_modules ./
+  create_agents.sh -x worktrees -x dist ./
 ```
 
 ### create_worktree.sh
