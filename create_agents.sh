@@ -87,7 +87,7 @@ if [ ${#EXCLUDES[@]} -gt 0 ]; then
   FIND_ARGS+=( ")" -prune -o )
 fi
 
-FIND_ARGS+=( -type f -name "$TARGET" -exec sh -c 'src="$1"; selected="$2"; dir="${src%/*}"; for target in AGENTS.md CLAUDE.md GEMINI.md; do [ "$target" = "$selected" ] || ln -sfn "$src" "$dir/$target"; done' sh {} "$TARGET" \; )
+FIND_ARGS+=( -type f -name "$TARGET" -exec sh -c 'src="$1"; selected="$2"; dir="${src%/*}"; for target in AGENTS.md CLAUDE.md GEMINI.md; do [ "$target" = "$selected" ] || ln -sfn "$selected" "$dir/$target"; done' sh {} "$TARGET" \; )
 
 # Execute single find invocation
 find "${FIND_ARGS[@]}"
