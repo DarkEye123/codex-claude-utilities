@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
-# create_worktree.sh – create a git worktree plus copy all top-level .env* files.
+# create_worktree.sh – create a git worktree plus copy all top-level .env* files and ./custom dir.
 # Optional: -c copies node_modules. Supports --base for new branches and --no-fetch.
 # For full usage details and examples run: ./create_worktree.sh --help
 
@@ -187,6 +187,16 @@ $(find . -maxdepth 1 -name ".env*" -type f | sort)
 EOF
 echo "Copied $ENV_COUNT .env file(s)."
 
+CUSTOM_COPIED=false
+if [[ -d "./custom" ]]; then
+    echo "Copying ./custom directory..."
+    cp -R "./custom" "$WORKTREE_PATH/"
+    echo "Copied ./custom to $WORKTREE_PATH/"
+    CUSTOM_COPIED=true
+else
+    echo "INFO: No ./custom directory found - skipping."
+fi
+
 echo -e "\nINFO: Running create_agents.sh for created worktree..."
 ./create_agents.sh "$(pwd)/$WORKTREE_PATH"
 AGENTS_MD_PATH="$(pwd)/$WORKTREE_PATH/AGENTS.md"
@@ -218,6 +228,7 @@ echo "${C_GREEN}Worktree created successfully${C_RESET}" \
     "(branch: $BRANCH_NAME | status: $BRANCH_STATUS | base: ${BASE_USED:-n/a})"
 echo "Location: $WORKTREE_PATH"
 echo "Env files copied: $ENV_COUNT"
+echo "custom dir copied: $CUSTOM_COPIED"
 echo "node_modules copied: $NODE_MODULES_COPIED"
 echo
 echo "Next: cd $WORKTREE_PATH"
