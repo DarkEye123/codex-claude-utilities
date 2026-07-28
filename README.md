@@ -125,10 +125,10 @@ $ bash remove_old_branches.sh
 
 ### hooks/install.sh
 
-Installs the native `pre-push` hook into the repository's real Git hooks directory. When run inside a worktree it resolves the shared Git dir with `git rev-parse --git-common-dir`, removes any custom `core.hooksPath`, skips installation if the current hook already matches `hooks/pre-push`, and otherwise copies the hook and makes it executable.
+Installs the native `pre-push` hook into the current repository's real Git hooks directory. When run inside a worktree it resolves the shared Git dir with `git rev-parse --git-common-dir`, removes any custom `core.hooksPath`, skips installation if the current hook already matches the utility's `hooks/pre-push`, and otherwise copies the hook and makes it executable.
 
 ```
-$ bash hooks/install.sh
+$ bash path/to/codex-claude-utilities/hooks/install.sh
 ```
 
 ### hooks/pre-push

@@ -4,16 +4,10 @@ This directory contains version-controlled Git hooks for the project.
 
 ## Installation
 
-After cloning the repository or when hooks are updated, run:
+From the repository where the hook should be installed, run its setup command or:
 
 ```bash
-npm run install:hooks
-```
-
-Or manually:
-
-```bash
-./hooks/install.sh
+bash path/to/codex-claude-utilities/hooks/install.sh
 ```
 
 ## Available Hooks
@@ -38,16 +32,13 @@ Runs before every `git push` and performs comprehensive code validation:
 
 If any check fails, the push is blocked until issues are resolved. The core validation runs in parallel for faster execution.
 
-## For New Team Members
+## In Consuming Repositories
 
-1. Clone the repository
-2. Run `npm install`
-3. Run `npm run dev` (hooks will be automatically applied - installed or skipped as needed)
-4. You're ready to go! The pre-push hook will automatically run on every push.
+The consuming repository decides when to invoke the installer, such as during its setup command or before starting development.
 
-**Note:** Hooks are automatically applied when you run `npm run dev`. The script will install hooks if needed or skip if already up to date. Manual installation is optional using `npm run install:hooks`.
+**Note:** The installer uses Git's common directory for the repository containing the current working directory and its own directory to source `pre-push`.
 
-**Worktree Support:** The installation script automatically detects Git worktrees and installs hooks in the main repository so they work across all worktrees.
+**Worktree Support:** The installation script installs hooks in the common Git directory so they work across all worktrees.
 
 ## Benefits
 
@@ -56,5 +47,4 @@ If any check fails, the push is blocked until issues are resolved. The core vali
 - **Parallel execution** - Fast validation with parallel processing
 - **Team consistency** - Everyone runs the same comprehensive checks
 - **Early detection** - Catch issues before CI/CD
-- **Zero setup friction** - Auto-installs on first `npm run dev`
 - **No external dependencies** - Uses native Git hooks (no husky required)
