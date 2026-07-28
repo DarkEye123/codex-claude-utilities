@@ -13,6 +13,7 @@ git submodule add git@github.com:DarkEye123/codex-claude-utilities.git utilities
 ## Scripts
 
 ### create_agents.sh
+
 Finds every selected instruction file under a root directory and symbolically links the other two names to it. `AGENTS.md` is the default target; use `--target` to select `CLAUDE.md` or `GEMINI.md`. The script uses a single `find` invocation, always excludes `node_modules`, and supports repeatable additional exclude patterns.
 
 ```
@@ -32,6 +33,7 @@ Examples:
 ```
 
 ### create_worktree.sh
+
 Creates a Git worktree at `./worktrees/<worktree_name>`, copies every top-level `./.env*` file into it, runs `./create_agents.sh` against the new worktree, and optionally copies `./node_modules`. If the target branch already exists locally it reuses it, if `origin/<branch>` exists it creates a local branch from that remote, otherwise it creates a new branch and optionally bases it on `--base`.
 
 ```
@@ -63,9 +65,11 @@ Examples:
 ```
 
 ### clear-worktrees.sh
+
 Analyzes existing Git worktrees, excludes the primary worktree, the current worktree, detached HEAD worktrees, and protected branches (`main`, `master`, `develop`), then produces a candidate table and a Markdown report. By default it auto-selects worktrees whose remote branch no longer exists, lets you adjust the selection interactively, and removes the final selection with `git worktree remove -f` followed by `git worktree prune`.
 
 Supported match rules:
+
 - `missing-remote`
 - `missing-remote-not-merged`
 - `missing-remote-merged`
@@ -102,6 +106,7 @@ bash clear-worktrees.sh --match missing-remote-merged --dry-run --report worktre
 ```
 
 ### clear-empty-worktree-dirs.sh
+
 Deletes empty directories under `./worktrees` from the bottom up. This is useful after removing nested worktrees or after `git worktree prune` leaves empty parent directories behind. The script exits with an error if `./worktrees` does not exist.
 
 ```
@@ -109,6 +114,7 @@ $ bash clear-empty-worktree-dirs.sh
 ```
 
 ### remove_old_branches.sh
+
 Deletes local Git branches whose upstream was removed from the remote. The script uses `git branch -vv`, filters entries marked `: gone]`, and deletes them with `git branch -D`.
 
 ```
@@ -118,6 +124,7 @@ $ bash remove_old_branches.sh
 ## Hooks
 
 ### hooks/install.sh
+
 Installs the native `pre-push` hook into the repository's real Git hooks directory. When run inside a worktree it resolves the shared Git dir with `git rev-parse --git-common-dir`, removes any custom `core.hooksPath`, skips installation if the current hook already matches `hooks/pre-push`, and otherwise copies the hook and makes it executable.
 
 ```
@@ -125,11 +132,13 @@ $ bash hooks/install.sh
 ```
 
 ### hooks/pre-push
+
 Native Git pre-push hook that reads the refs being pushed, computes the files reachable from commits that are not yet on the destination remote, and excludes paths under `worktrees/`. It then runs `npm run format`, `npm run lint`, `npm run check`, `npm run knip`, and `npm run test:unit` in parallel, writing logs to `/tmp/*_output_<timestamp>.log`.
 
 If formatting introduces new changes in files that are part of the push, the hook fails even when `npm run format` exits successfully. Single failures open the relevant log in `less` when a TTY is available; multiple failures show a small menu, and non-interactive environments print logs directly.
 
 ## Requirements
+
 - Bash
 - Git
 - `find`, `awk`, `sort`, `grep`, and standard Unix utilities
@@ -137,4 +146,5 @@ If formatting introduces new changes in files that are part of the push, the hoo
 - Repository npm scripts for `format`, `lint`, `check`, `knip`, and `test:unit` when using the pre-push hook
 
 ## Contributing
+
 Test script changes locally, verify the documented commands still match `--help` output and observed behavior, and open a pull request with the script changes and README updates together.
