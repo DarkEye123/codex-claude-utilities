@@ -36,6 +36,7 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 SCRIPT_NAME="$(basename "$0")"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 show_help() {
     cat <<EOF
@@ -198,7 +199,7 @@ else
 fi
 
 echo -e "\nINFO: Running create_agents.sh for created worktree..."
-./create_agents.sh "$(pwd)/$WORKTREE_PATH"
+"$SCRIPT_DIR/create_agents.sh" "$(pwd)/$WORKTREE_PATH"
 AGENTS_MD_PATH="$(pwd)/$WORKTREE_PATH/AGENTS.md"
 if [[ ! -f "$AGENTS_MD_PATH" ]]; then
     echo "${C_RED}ERROR:${C_RESET} AGENTS.md not found at $AGENTS_MD_PATH" >&2

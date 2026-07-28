@@ -34,7 +34,7 @@ Examples:
 
 ### create_worktree.sh
 
-Creates a Git worktree at `./worktrees/<worktree_name>`, copies every top-level `./.env*` file into it, runs `./create_agents.sh` against the new worktree, and optionally copies `./node_modules`. If the target branch already exists locally it reuses it, if `origin/<branch>` exists it creates a local branch from that remote, otherwise it creates a new branch and optionally bases it on `--base`.
+Creates a Git worktree at `./worktrees/<worktree_name>`, copies every top-level `./.env*` file into it, runs its sibling `create_agents.sh` against the new worktree, and optionally copies `./node_modules`. If the target branch already exists locally it reuses it, if `origin/<branch>` exists it creates a local branch from that remote, otherwise it creates a new branch and optionally bases it on `--base`.
 
 ```
 $ bash create_worktree.sh --help
