@@ -180,6 +180,7 @@ fi
 echo "Copying .env files..."
 ENV_COUNT=0
 while IFS= read -r env_file; do
+    [[ -n "$env_file" ]] || continue # empty heredoc line when no .env* files exist
     cp "$env_file" "$WORKTREE_PATH/"
     echo "Copied $env_file"
     ENV_COUNT=$((ENV_COUNT+1))
