@@ -36,6 +36,8 @@ Examples:
 
 Creates a Git worktree at `./worktrees/<worktree_name>`, copies every top-level `./.env*` file into it, runs its sibling `create_agents.sh` against the new worktree, and optionally copies `./node_modules`. If the target branch already exists locally it reuses it, if `origin/<branch>` exists it creates a local branch from that remote, otherwise it creates a new branch and optionally bases it on `--base`.
 
+A new branch gets `origin/<branch>` as its upstream, not the `--base` branch. A plain `git push` creates `origin/<branch>`. Until the first push, `git status` shows the upstream as `gone`.
+
 ```
 $ bash create_worktree.sh --help
 create_worktree.sh (v2.0.1 (2025-09-12))
