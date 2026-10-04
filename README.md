@@ -74,6 +74,15 @@ Examples:
 
 Analyzes existing Git worktrees, excludes the primary worktree, the current worktree, detached HEAD worktrees, and protected branches (`main`, `master`, `develop`), then produces a candidate table and a Markdown report. By default it auto-selects worktrees whose remote branch no longer exists, lets you adjust the selection interactively, and removes the final selection with `git worktree remove -f` followed by `git worktree prune`.
 
+A branch counts as merged when it is in the base ref, or when its tip is the head commit of a merged PR. The PR check uses `gh`, so it also finds squash and rebase merges. Without `gh`, the script does only the first check and prints a warning.
+
+The script never selects or removes a worktree that can lose work:
+
+- a worktree with uncommitted or untracked changes
+- a worktree with a top-level `.env*` file that is missing in the main checkout or is different there
+
+The table shows these worktrees with `Clean` set to `no`, together with the reason. The script checks each worktree again just before it removes it.
+
 Supported match rules:
 
 - `missing-remote`
@@ -103,6 +112,11 @@ Options:
   --no-fetch                Skip `git fetch --prune origin` before analysis
   --yes                     Skip final confirmation prompt
   -h, --help                Show this help
+
+Merged: the branch is in the base ref, or its tip is the head of a merged PR
+(found with gh, so squash merges count). Without gh, only the first check runs.
+Worktrees with uncommitted or untracked changes, or with .env* files that are
+missing or different in the main checkout, are never selected or removed.
 ```
 
 Example:
