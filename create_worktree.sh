@@ -175,6 +175,9 @@ else
         BRANCH_STATUS="new"
         git worktree add --no-track -b "$BRANCH_NAME" "$WORKTREE_PATH"
     fi
+    # Upstream is origin/<branch> even before the first push (git push targets it, not the base)
+    git config "branch.$BRANCH_NAME.remote" origin
+    git config "branch.$BRANCH_NAME.merge" "refs/heads/$BRANCH_NAME"
 fi
 
 echo "Copying .env files..."
