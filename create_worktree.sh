@@ -169,11 +169,11 @@ else
         echo "Creating new branch '$BRANCH_NAME' from base '$BASE_BRANCH'"
         BRANCH_STATUS="new"
         BASE_USED="$BASE_BRANCH"
-        git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" "$BASE_BRANCH"
+        git worktree add --no-track -b "$BRANCH_NAME" "$WORKTREE_PATH" "$BASE_BRANCH"
     else
         echo "Creating new branch: $BRANCH_NAME"
         BRANCH_STATUS="new"
-        git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH"
+        git worktree add --no-track -b "$BRANCH_NAME" "$WORKTREE_PATH"
     fi
 fi
 
