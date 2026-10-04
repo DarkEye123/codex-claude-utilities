@@ -9,6 +9,7 @@ DRY_RUN=0
 NON_INTERACTIVE=0
 AUTO_YES=0
 FETCH_REMOTE=1
+GH_AVAILABLE=0
 
 declare -a EXCLUDE_PATHS=()
 declare -a EXCLUDE_BRANCHES=()
@@ -37,6 +38,12 @@ Options:
   --no-fetch                Skip `git fetch --prune origin` before analysis
   --yes                     Skip final confirmation prompt
   -h, --help                Show this help
+
+Merged: the branch is in the base ref, or its tip is the head of a merged PR
+(found with gh, so squash merges count). Without gh, only the first check runs.
+With --non-interactive, a matching worktree with uncommitted or untracked
+changes, or with .env* files that are missing or different in the main
+checkout, is not selected. It is listed for a manual check instead.
 EOF
 }
 
@@ -158,6 +165,7 @@ declare -a BRANCH_MERGED=()
 declare -a HEAD_IN_BASE=()
 declare -a PROTECTED=()
 declare -a ON_DISK=()
+declare -a CLEAN=()
 declare -a DEFAULT_SELECTED=()
 
 resolve_primary_worktree_path() {
@@ -241,11 +249,44 @@ is_default_selected() {
   esac
 }
 
+# Squash and rebase merges leave the branch out of the base; a merged PR with this exact head proves the merge.
+is_merged_pr_head() {
+  local branch="$1"
+  local head="$2"
+
+  (( GH_AVAILABLE == 1 )) || return 1
+  gh pr list --state merged --head "$branch" --json headRefOid --jq '.[].headRefOid' 2>/dev/null | grep -qx "$head"
+}
+
+# Prints why removing the worktree could lose work; prints nothing when it is safe.
+worktree_dirty_reason() {
+  local wt="$1"
+  local status env_file name
+
+  if ! status="$(git -C "$wt" status --porcelain 2>/dev/null)"; then
+    echo "git status failed"
+    return
+  fi
+  if [[ -n "$status" ]]; then
+    echo "uncommitted or untracked changes"
+    return
+  fi
+
+  for env_file in "$wt"/.env*; do
+    [[ -f "$env_file" ]] || continue
+    name="${env_file##*/}"
+    if ! cmp -s "$env_file" "$PRIMARY_WORKTREE_PATH/$name"; then
+      echo "$name missing or different in main checkout"
+      return
+    fi
+  done
+}
+
 append_worktree_row() {
   local wt="$1"
   local head="$2"
   local branch_ref="$3"
-  local branch upstream remote_exists behind ahead branch_merged head_in_base protected on_disk selected
+  local branch upstream remote_exists behind ahead branch_merged head_in_base protected on_disk clean reason selected
 
   branch="${branch_ref#refs/heads/}"
   if [[ -z "$branch" || "$branch" == "$branch_ref" ]]; then
@@ -284,10 +325,14 @@ append_worktree_row() {
   branch_merged="no"
   head_in_base="no"
   on_disk="yes"
+  clean="yes"
   selected="no"
 
   if [[ ! -d "$wt" ]]; then
     on_disk="no"
+  else
+    reason="$(worktree_dirty_reason "$wt")"
+    [[ -z "$reason" ]] || clean="$reason"
   fi
 
   upstream="$(git for-each-ref --format='%(upstream:short)' "refs/heads/$branch")"
@@ -311,8 +356,16 @@ append_worktree_row() {
     head_in_base="yes"
   fi
 
+  if [[ "$branch_merged" == "no" ]] && is_merged_pr_head "$branch" "$head"; then
+    branch_merged="yes"
+  fi
+
   if is_default_selected "$remote_exists" "$branch_merged" "$head_in_base"; then
     selected="yes"
+    # Without a person to review the list, leave worktrees that can hold work for a manual check.
+    if (( NON_INTERACTIVE == 1 )) && [[ "$clean" != "yes" ]]; then
+      selected="manual"
+    fi
   fi
 
   PATHS+=("$wt")
@@ -326,21 +379,28 @@ append_worktree_row() {
   HEAD_IN_BASE+=("$head_in_base")
   PROTECTED+=("$protected")
   ON_DISK+=("$on_disk")
+  CLEAN+=("$clean")
   DEFAULT_SELECTED+=("$selected")
 }
 
 print_candidates() {
   echo
-  printf '%-5s %-9s %-4s %-4s %-6s %-6s %-5s %s\n' "Idx" "Selected" "Rmt" "Mrg" "Behind" "Ahead" "Disk" "Path [branch]"
-  printf '%-5s %-9s %-4s %-4s %-6s %-6s %-5s %s\n' "---" "--------" "---" "---" "------" "-----" "----" "-------------"
+  printf '%-5s %-9s %-4s %-4s %-6s %-6s %-5s %-5s %s\n' "Idx" "Selected" "Rmt" "Mrg" "Behind" "Ahead" "Disk" "Clean" "Path [branch]"
+  printf '%-5s %-9s %-4s %-4s %-6s %-6s %-5s %-5s %s\n' "---" "--------" "---" "---" "------" "-----" "----" "-----" "-------------"
 
-  local i marker
+  local i marker clean_marker
   for ((i = 0; i < ${#PATHS[@]}; i++)); do
     marker="[ ]"
     if [[ "${DEFAULT_SELECTED[$i]}" == "yes" ]]; then
       marker="[x]"
+    elif [[ "${DEFAULT_SELECTED[$i]}" == "manual" ]]; then
+      marker="[!]"
     fi
-    printf '%-5s %-9s %-4s %-4s %-6s %-6s %-5s %s [%s]\n' \
+    clean_marker="yes"
+    if [[ "${CLEAN[$i]}" != "yes" ]]; then
+      clean_marker="no"
+    fi
+    printf '%-5s %-9s %-4s %-4s %-6s %-6s %-5s %-5s %s [%s]\n' \
       "$((i + 1))" \
       "$marker" \
       "${REMOTE_EXISTS[$i]}" \
@@ -348,8 +408,12 @@ print_candidates() {
       "${BEHIND[$i]}" \
       "${AHEAD[$i]}" \
       "${ON_DISK[$i]}" \
+      "$clean_marker" \
       "${PATHS[$i]}" \
       "${BRANCHES[$i]}"
+    if [[ "$clean_marker" == "no" ]]; then
+      echo "      not clean: ${CLEAN[$i]}"
+    fi
   done
   echo
 }
@@ -501,19 +565,22 @@ write_report() {
     echo
     echo "## Candidates"
     echo
-    echo "| Idx | Default Selected | On Disk | Remote Exists | Branch Merged | Head In Base | Behind | Ahead | Branch | Path |"
-    echo "|---|---|---|---|---|---|---|---|---|---|"
+    echo "| Idx | Default Selected | On Disk | Clean | Remote Exists | Branch Merged | Head In Base | Behind | Ahead | Branch | Path |"
+    echo "|---|---|---|---|---|---|---|---|---|---|---|"
 
     local i default_marker
     for ((i = 0; i < ${#PATHS[@]}; i++)); do
       default_marker="no"
       if [[ "${DEFAULT_SELECTED[$i]}" == "yes" ]]; then
         default_marker="yes"
+      elif [[ "${DEFAULT_SELECTED[$i]}" == "manual" ]]; then
+        default_marker="manual check"
       fi
-      printf '| %s | %s | %s | %s | %s | %s | %s | %s | `%s` | `%s` |\n' \
+      printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s | `%s` | `%s` |\n' \
         "$((i + 1))" \
         "$default_marker" \
         "${ON_DISK[$i]}" \
+        "${CLEAN[$i]}" \
         "${REMOTE_EXISTS[$i]}" \
         "${BRANCH_MERGED[$i]}" \
         "${HEAD_IN_BASE[$i]}" \
@@ -537,6 +604,19 @@ write_report() {
         printf -- '- `%s` [%s]\n' "${PATHS[$idx]}" "${BRANCHES[$idx]}"
       done
     fi
+
+    if [[ " ${DEFAULT_SELECTED[*]-} " == *" manual "* ]]; then
+      echo
+      echo "## Manual Check"
+      echo
+      echo "These worktrees match the rule but are not clean. They were not removed."
+      echo
+      for ((i = 0; i < ${#PATHS[@]}; i++)); do
+        if [[ "${DEFAULT_SELECTED[$i]}" == "manual" ]]; then
+          printf -- '- `%s` [%s]: %s\n' "${PATHS[$i]}" "${BRANCHES[$i]}" "${CLEAN[$i]}"
+        fi
+      done
+    fi
   } >"$REPORT_PATH"
 }
 
@@ -553,6 +633,15 @@ print_final_selection() {
       continue
     fi
     echo "  - ${PATHS[$idx]} [${BRANCHES[$idx]}]"
+  done
+}
+
+print_manual_check() {
+  local i
+  for ((i = 0; i < ${#PATHS[@]}; i++)); do
+    if [[ "${DEFAULT_SELECTED[$i]}" == "manual" ]]; then
+      echo "MANUAL CHECK ${PATHS[$i]} [${BRANCHES[$i]}]: ${CLEAN[$i]}"
+    fi
   done
 }
 
@@ -613,6 +702,13 @@ main() {
     fi
   fi
 
+  # One probe covers a missing gh, no login, no repo access and an old gh without headRefOid.
+  if command -v gh >/dev/null 2>&1 && gh pr list --limit 1 --json headRefOid >/dev/null 2>&1; then
+    GH_AVAILABLE=1
+  else
+    echo "Warning: gh is missing, not logged in, cannot read this repo, or is too old for headRefOid; squash-merged branches are not detected as merged." >&2
+  fi
+
   if ! git rev-parse --verify --quiet "$BASE_REF" >/dev/null; then
     echo "Base ref not found locally: $BASE_REF" >&2
     exit 1
@@ -631,6 +727,7 @@ main() {
   print_candidates
   manual_selection_prompt
   print_final_selection
+  print_manual_check
   write_report
   echo "Report written to $REPORT_PATH"
 
