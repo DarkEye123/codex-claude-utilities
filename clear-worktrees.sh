@@ -41,8 +41,9 @@ Options:
 
 Merged: the branch is in the base ref, or its tip is the head of a merged PR
 (found with gh, so squash merges count). Without gh, only the first check runs.
-Worktrees with uncommitted or untracked changes, or with .env* files that are
-missing or different in the main checkout, are never selected or removed.
+With --non-interactive, a matching worktree with uncommitted or untracked
+changes, or with .env* files that are missing or different in the main
+checkout, is not selected. It is listed for a manual check instead.
 EOF
 }
 
@@ -228,9 +229,6 @@ is_default_selected() {
   local remote_exists="$1"
   local branch_merged="$2"
   local head_in_base="$3"
-  local clean="$4"
-
-  [[ "$clean" == "yes" ]] || return 1
 
   case "$MATCH_RULE" in
     missing-remote)
@@ -362,8 +360,12 @@ append_worktree_row() {
     branch_merged="yes"
   fi
 
-  if is_default_selected "$remote_exists" "$branch_merged" "$head_in_base" "$clean"; then
+  if is_default_selected "$remote_exists" "$branch_merged" "$head_in_base"; then
     selected="yes"
+    # Without a person to review the list, leave worktrees that can hold work for a manual check.
+    if (( NON_INTERACTIVE == 1 )) && [[ "$clean" != "yes" ]]; then
+      selected="manual"
+    fi
   fi
 
   PATHS+=("$wt")
@@ -391,6 +393,8 @@ print_candidates() {
     marker="[ ]"
     if [[ "${DEFAULT_SELECTED[$i]}" == "yes" ]]; then
       marker="[x]"
+    elif [[ "${DEFAULT_SELECTED[$i]}" == "manual" ]]; then
+      marker="[!]"
     fi
     clean_marker="yes"
     if [[ "${CLEAN[$i]}" != "yes" ]]; then
@@ -408,7 +412,7 @@ print_candidates() {
       "${PATHS[$i]}" \
       "${BRANCHES[$i]}"
     if [[ "$clean_marker" == "no" ]]; then
-      echo "      not removable: ${CLEAN[$i]}"
+      echo "      not clean: ${CLEAN[$i]}"
     fi
   done
   echo
@@ -569,6 +573,8 @@ write_report() {
       default_marker="no"
       if [[ "${DEFAULT_SELECTED[$i]}" == "yes" ]]; then
         default_marker="yes"
+      elif [[ "${DEFAULT_SELECTED[$i]}" == "manual" ]]; then
+        default_marker="manual check"
       fi
       printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s | `%s` | `%s` |\n' \
         "$((i + 1))" \
@@ -598,6 +604,19 @@ write_report() {
         printf -- '- `%s` [%s]\n' "${PATHS[$idx]}" "${BRANCHES[$idx]}"
       done
     fi
+
+    if [[ " ${DEFAULT_SELECTED[*]-} " == *" manual "* ]]; then
+      echo
+      echo "## Manual Check"
+      echo
+      echo "These worktrees match the rule but are not clean. They were not removed."
+      echo
+      for ((i = 0; i < ${#PATHS[@]}; i++)); do
+        if [[ "${DEFAULT_SELECTED[$i]}" == "manual" ]]; then
+          printf -- '- `%s` [%s]: %s\n' "${PATHS[$i]}" "${BRANCHES[$i]}" "${CLEAN[$i]}"
+        fi
+      done
+    fi
   } >"$REPORT_PATH"
 }
 
@@ -617,6 +636,15 @@ print_final_selection() {
   done
 }
 
+print_manual_check() {
+  local i
+  for ((i = 0; i < ${#PATHS[@]}; i++)); do
+    if [[ "${DEFAULT_SELECTED[$i]}" == "manual" ]]; then
+      echo "MANUAL CHECK ${PATHS[$i]} [${BRANCHES[$i]}]: ${CLEAN[$i]}"
+    fi
+  done
+}
+
 confirm_action() {
   if (( AUTO_YES == 1 )); then
     return 0
@@ -628,7 +656,7 @@ confirm_action() {
 }
 
 delete_selected() {
-  local removed=0 missing=0 skipped=0 failed=0 idx path reason
+  local removed=0 missing=0 failed=0 idx path
 
   for idx in "${FINAL_SELECTED[@]-}"; do
     if [[ -z "$idx" ]]; then
@@ -642,14 +670,6 @@ delete_selected() {
       continue
     fi
 
-    # Check again: the worktree can change while the user reviews the selection.
-    reason="$(worktree_dirty_reason "$path")"
-    if [[ -n "$reason" ]]; then
-      echo "SKIPPED $path ($reason)"
-      skipped=$((skipped + 1))
-      continue
-    fi
-
     if git worktree remove -f "$path"; then
       echo "REMOVED $path"
       removed=$((removed + 1))
@@ -660,7 +680,7 @@ delete_selected() {
   done
 
   git worktree prune
-  echo "SUMMARY removed=$removed missing=$missing skipped=$skipped failed=$failed"
+  echo "SUMMARY removed=$removed missing=$missing failed=$failed"
 }
 
 main() {
@@ -707,6 +727,7 @@ main() {
   print_candidates
   manual_selection_prompt
   print_final_selection
+  print_manual_check
   write_report
   echo "Report written to $REPORT_PATH"
 

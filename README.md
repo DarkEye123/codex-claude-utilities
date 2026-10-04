@@ -76,12 +76,12 @@ Analyzes existing Git worktrees, excludes the primary worktree, the current work
 
 A branch counts as merged when it is in the base ref, or when its tip is the head commit of a merged PR. The PR check uses `gh`, so it also finds squash and rebase merges. Without `gh`, the script does only the first check and prints a warning.
 
-The script never selects or removes a worktree that can lose work:
+The table marks a worktree as not clean, with the reason, when it has one of these:
 
-- a worktree with uncommitted or untracked changes
-- a worktree with a top-level `.env*` file that is missing in the main checkout or is different there
+- uncommitted or untracked changes
+- a top-level `.env*` file that is missing in the main checkout or is different there
 
-The table shows these worktrees with `Clean` set to `no`, together with the reason. The script checks each worktree again just before it removes it.
+In interactive mode, this is information only. You decide what to remove. With `--non-interactive`, the script does not select a matching worktree that is not clean. It marks the worktree `[!]`, prints a `MANUAL CHECK` line, and lists it in the `Manual Check` section of the report. Check these worktrees yourself.
 
 Supported match rules:
 
@@ -115,8 +115,9 @@ Options:
 
 Merged: the branch is in the base ref, or its tip is the head of a merged PR
 (found with gh, so squash merges count). Without gh, only the first check runs.
-Worktrees with uncommitted or untracked changes, or with .env* files that are
-missing or different in the main checkout, are never selected or removed.
+With --non-interactive, a matching worktree with uncommitted or untracked
+changes, or with .env* files that are missing or different in the main
+checkout, is not selected. It is listed for a manual check instead.
 ```
 
 Example:
