@@ -59,7 +59,7 @@ Options:
 Behavior:
     - Fails if worktree path exists or branch already attached elsewhere
     - Copies every file matching ./.env* (no filtering) as requested
-    - Pushes a new branch to origin right away, so its upstream is origin/<branch>
+    - Pushes a new branch to origin right away (no pre-push hook), so its upstream is origin/<branch>
     - Asks before it reuses an existing origin/<branch> when --base is given
 
 Examples:
@@ -193,8 +193,9 @@ else
         BRANCH_STATUS="new"
         git worktree add --no-track -b "$BRANCH_NAME" "$WORKTREE_PATH"
     fi
-    # Push now so origin/<branch> exists and is the upstream (not the base)
-    if ! git -C "$WORKTREE_PATH" push -u origin "$BRANCH_NAME"; then
+    # Push now so origin/<branch> exists and is the upstream (not the base).
+    # --no-verify: skip the pre-push hook during creation; later pushes run it.
+    if ! git -C "$WORKTREE_PATH" push --no-verify -u origin "$BRANCH_NAME"; then
         echo "${C_YELLOW}Warning:${C_RESET} Push failed. The branch has no upstream. Run 'git push -u origin $BRANCH_NAME' later." >&2
     fi
 fi

@@ -36,7 +36,7 @@ Examples:
 
 Creates a Git worktree at `./worktrees/<worktree_name>`, copies every top-level `./.env*` file into it, runs its sibling `create_agents.sh` against the new worktree, and optionally copies `./node_modules`. If the target branch already exists locally it reuses it, if `origin/<branch>` exists it creates a local branch from that remote, otherwise it creates a new branch and optionally bases it on `--base`.
 
-The script pushes a new branch to `origin` right away, so its upstream is `origin/<branch>`, not the `--base` branch. If the push fails, the branch has no upstream. Then run `git push -u origin <branch>` yourself.
+The script pushes a new branch to `origin` right away, so its upstream is `origin/<branch>`, not the `--base` branch. This push skips the `pre-push` hook. Later pushes run it. If the push fails, the branch has no upstream. Then run `git push -u origin <branch>` yourself.
 
 When you give `--base` and `origin/<branch>` already exists, the script warns you. In a terminal, it asks you to use the existing branch, enter a new name, or abort. Without a terminal, it uses the existing branch.
 
@@ -61,7 +61,7 @@ Options:
 Behavior:
     - Fails if worktree path exists or branch already attached elsewhere
     - Copies every file matching ./.env* (no filtering) as requested
-    - Pushes a new branch to origin right away, so its upstream is origin/<branch>
+    - Pushes a new branch to origin right away (no pre-push hook), so its upstream is origin/<branch>
     - Asks before it reuses an existing origin/<branch> when --base is given
 
 Examples:
