@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-WORKTREES_DIR="$SCRIPT_DIR/worktrees"
+WORKTREES_DIR="./worktrees"
 
 if [[ ! -d "$WORKTREES_DIR" ]]; then
   echo "worktrees directory not found at $WORKTREES_DIR" >&2
