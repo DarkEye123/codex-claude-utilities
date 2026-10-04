@@ -9,7 +9,7 @@ DRY_RUN=0
 NON_INTERACTIVE=0
 AUTO_YES=0
 FETCH_REMOTE=1
-GH_OWNER=""
+GH_AVAILABLE=0
 
 declare -a EXCLUDE_PATHS=()
 declare -a EXCLUDE_BRANCHES=()
@@ -256,10 +256,8 @@ is_merged_pr_head() {
   local branch="$1"
   local head="$2"
 
-  [[ -n "$GH_OWNER" ]] || return 1
-  # REST, not `gh pr list --json headRefOid`: older gh versions do not have that field.
-  gh api -X GET 'repos/{owner}/{repo}/pulls' -f state=closed -f head="$GH_OWNER:$branch" -f per_page=100 \
-    --jq '.[] | select(.merged_at != null) | .head.sha' 2>/dev/null | grep -qx "$head"
+  (( GH_AVAILABLE == 1 )) || return 1
+  gh pr list --state merged --head "$branch" --json headRefOid --jq '.[].headRefOid' 2>/dev/null | grep -qx "$head"
 }
 
 # Prints why removing the worktree could lose work; prints nothing when it is safe.
@@ -684,11 +682,11 @@ main() {
     fi
   fi
 
-  if command -v gh >/dev/null 2>&1; then
-    GH_OWNER="$(gh repo view --json owner --jq .owner.login 2>/dev/null)" || GH_OWNER=""
-  fi
-  if [[ -z "$GH_OWNER" ]]; then
-    echo "Warning: gh is not available or cannot read this repo; squash-merged branches are not detected as merged." >&2
+  # One probe covers a missing gh, no login, no repo access and an old gh without headRefOid.
+  if command -v gh >/dev/null 2>&1 && gh pr list --limit 1 --json headRefOid >/dev/null 2>&1; then
+    GH_AVAILABLE=1
+  else
+    echo "Warning: gh is missing, not logged in, cannot read this repo, or is too old for headRefOid; squash-merged branches are not detected as merged." >&2
   fi
 
   if ! git rev-parse --verify --quiet "$BASE_REF" >/dev/null; then
