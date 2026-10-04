@@ -59,6 +59,8 @@ Options:
 Behavior:
     - Fails if worktree path exists or branch already attached elsewhere
     - Copies every file matching ./.env* (no filtering) as requested
+    - Pushes a new branch to origin right away, so its upstream is origin/<branch>
+    - Asks before it reuses an existing origin/<branch> when --base is given
 
 Examples:
     $SCRIPT_NAME feature-x
@@ -138,6 +140,22 @@ if $DO_FETCH; then
     git fetch --prune --quiet || echo "${C_YELLOW}Warning:${C_RESET} git fetch failed (network issue or auth?). Continuing with local refs only; remote branch detection may be stale. Use --no-fetch to suppress this step."
 fi
 
+# A new branch was asked for (--base), but origin/<branch> already exists: ask before reusing it
+while [[ -n "$BASE_BRANCH" ]] && ! git show-ref --verify --quiet "refs/heads/$BRANCH_NAME" \
+    && git show-ref --verify --quiet "refs/remotes/origin/$BRANCH_NAME"; do
+    echo "${C_YELLOW}Warning:${C_RESET} origin/$BRANCH_NAME already exists. Reusing it ignores --base '$BASE_BRANCH'." >&2
+    if [[ ! -t 0 ]]; then
+        echo "No terminal: reusing origin/$BRANCH_NAME." >&2
+        break
+    fi
+    read -r -t 60 -p "[u]se origin/$BRANCH_NAME, [r]ename the new branch, [a]bort? (60s, then use) " CHOICE || CHOICE=u
+    case "$CHOICE" in
+        u|U) break ;;
+        r|R) read -r -p "New branch name: " BRANCH_NAME ;;
+        *) echo "Aborted." >&2; exit 1 ;;
+    esac
+done
+
 # Abort if branch already checked out in another worktree
 if git worktree list --porcelain | grep -q "^branch refs/heads/$BRANCH_NAME$"; then
     echo "${C_RED}Error:${C_RESET} Branch '$BRANCH_NAME' already has an attached worktree." >&2
@@ -175,9 +193,10 @@ else
         BRANCH_STATUS="new"
         git worktree add --no-track -b "$BRANCH_NAME" "$WORKTREE_PATH"
     fi
-    # Upstream is origin/<branch> even before the first push (git push targets it, not the base)
-    git config "branch.$BRANCH_NAME.remote" origin
-    git config "branch.$BRANCH_NAME.merge" "refs/heads/$BRANCH_NAME"
+    # Push now so origin/<branch> exists and is the upstream (not the base)
+    if ! git -C "$WORKTREE_PATH" push -u origin "$BRANCH_NAME"; then
+        echo "${C_YELLOW}Warning:${C_RESET} Push failed. The branch has no upstream. Run 'git push -u origin $BRANCH_NAME' later." >&2
+    fi
 fi
 
 echo "Copying .env files..."
