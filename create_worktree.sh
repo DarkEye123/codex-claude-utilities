@@ -59,6 +59,8 @@ Options:
 Behavior:
     - Fails if worktree path exists or branch already attached elsewhere
     - Copies every file matching ./.env* (no filtering) as requested
+    - Pushes a new branch to origin right away (no pre-push hook), so its upstream is origin/<branch>
+    - Asks before it reuses an existing origin/<branch> when --base is given
 
 Examples:
     $SCRIPT_NAME feature-x
@@ -138,6 +140,22 @@ if $DO_FETCH; then
     git fetch --prune --quiet || echo "${C_YELLOW}Warning:${C_RESET} git fetch failed (network issue or auth?). Continuing with local refs only; remote branch detection may be stale. Use --no-fetch to suppress this step."
 fi
 
+# A new branch was asked for (--base), but origin/<branch> already exists: ask before reusing it
+while [[ -n "$BASE_BRANCH" ]] && ! git show-ref --verify --quiet "refs/heads/$BRANCH_NAME" \
+    && git show-ref --verify --quiet "refs/remotes/origin/$BRANCH_NAME"; do
+    echo "${C_YELLOW}Warning:${C_RESET} origin/$BRANCH_NAME already exists. Reusing it ignores --base '$BASE_BRANCH'." >&2
+    if [[ ! -t 0 ]]; then
+        echo "No terminal: reusing origin/$BRANCH_NAME." >&2
+        break
+    fi
+    read -r -t 60 -p "[u]se origin/$BRANCH_NAME, [r]ename the new branch, [a]bort? (60s, then use) " CHOICE || CHOICE=u
+    case "$CHOICE" in
+        u|U) break ;;
+        r|R) read -r -p "New branch name: " BRANCH_NAME ;;
+        *) echo "Aborted." >&2; exit 1 ;;
+    esac
+done
+
 # Abort if branch already checked out in another worktree
 if git worktree list --porcelain | grep -q "^branch refs/heads/$BRANCH_NAME$"; then
     echo "${C_RED}Error:${C_RESET} Branch '$BRANCH_NAME' already has an attached worktree." >&2
@@ -169,17 +187,23 @@ else
         echo "Creating new branch '$BRANCH_NAME' from base '$BASE_BRANCH'"
         BRANCH_STATUS="new"
         BASE_USED="$BASE_BRANCH"
-        git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" "$BASE_BRANCH"
+        git worktree add --no-track -b "$BRANCH_NAME" "$WORKTREE_PATH" "$BASE_BRANCH"
     else
         echo "Creating new branch: $BRANCH_NAME"
         BRANCH_STATUS="new"
-        git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH"
+        git worktree add --no-track -b "$BRANCH_NAME" "$WORKTREE_PATH"
+    fi
+    # Push now so origin/<branch> exists and is the upstream (not the base).
+    # --no-verify: skip the pre-push hook during creation; later pushes run it.
+    if ! git -C "$WORKTREE_PATH" push --no-verify -u origin "$BRANCH_NAME"; then
+        echo "${C_YELLOW}Warning:${C_RESET} Push failed. The branch has no upstream. Run 'git push -u origin $BRANCH_NAME' later." >&2
     fi
 fi
 
 echo "Copying .env files..."
 ENV_COUNT=0
 while IFS= read -r env_file; do
+    [[ -n "$env_file" ]] || continue # empty heredoc line when no .env* files exist
     cp "$env_file" "$WORKTREE_PATH/"
     echo "Copied $env_file"
     ENV_COUNT=$((ENV_COUNT+1))
