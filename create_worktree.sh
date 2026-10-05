@@ -48,7 +48,7 @@ Creates a git worktree and copies all top-level .env* files. Optional node_modul
 
 Positional:
     worktree_name          Name for the new worktree (required)
-    branch_name            Existing or new branch (defaults to worktree_name)
+    branch_name            Existing or new branch (defaults to worktree_name), not its base
 
 Options:
     -c                     Copy node_modules directory recursively
@@ -57,6 +57,7 @@ Options:
     --help                 Show this help and exit
 
 Behavior:
+    - A new branch starts from the current HEAD, or from --base when given
     - Fails if worktree path exists or branch already attached elsewhere
     - Copies every file matching ./.env* (no filtering) as requested
     - Pushes a new branch to origin right away (no pre-push hook), so its upstream is origin/<branch>
@@ -64,7 +65,7 @@ Behavior:
 
 Examples:
     $SCRIPT_NAME feature-x
-    $SCRIPT_NAME feature-x origin/develop
+    $SCRIPT_NAME feature-x fix/feature-x
     $SCRIPT_NAME feature-x -c --base origin/main
 EOF
 }
