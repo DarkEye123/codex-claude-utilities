@@ -34,7 +34,13 @@ Examples:
 
 ### create_worktree.sh
 
-Creates a Git worktree at `./worktrees/<worktree_name>`, copies every top-level `./.env*` file into it, runs its sibling `create_agents.sh` against the new worktree, and optionally copies `./node_modules`. If the target branch already exists locally it reuses it, if `origin/<branch>` exists it creates a local branch from that remote, otherwise it creates a new branch and optionally bases it on `--base`.
+Creates a Git worktree at `./worktrees/<worktree_name>`, copies every top-level `./.env*` file into it, runs its sibling `create_agents.sh` against the new worktree, and optionally copies `./node_modules`. If the target branch already exists locally it reuses it, if `origin/<branch>` exists it creates a local branch from that remote, otherwise it creates a new branch from the current `HEAD`, or from `--base` when you give it.
+
+The usual call gives only one name. The script uses it for the worktree and for the branch:
+
+```bash
+./create_worktree.sh my-new-change
+```
 
 The script pushes a new branch to `origin` right away, so its upstream is `origin/<branch>`, not the `--base` branch. This push skips the `pre-push` hook. Later pushes run it. If the push fails, the branch has no upstream. Then run `git push -u origin <branch>` yourself.
 
@@ -50,7 +56,7 @@ Creates a git worktree and copies all top-level .env* files. Optional node_modul
 
 Positional:
     worktree_name          Name for the new worktree (required)
-    branch_name            Existing or new branch (defaults to worktree_name)
+    branch_name            Existing or new branch (defaults to worktree_name), not its base
 
 Options:
     -c                     Copy node_modules directory recursively
@@ -59,6 +65,7 @@ Options:
     --help                 Show this help and exit
 
 Behavior:
+    - A new branch starts from the current HEAD, or from --base when given
     - Fails if worktree path exists or branch already attached elsewhere
     - Copies every file matching ./.env* (no filtering) as requested
     - Pushes a new branch to origin right away (no pre-push hook), so its upstream is origin/<branch>
@@ -66,7 +73,7 @@ Behavior:
 
 Examples:
     create_worktree.sh feature-x
-    create_worktree.sh feature-x origin/develop
+    create_worktree.sh feature-x fix/feature-x
     create_worktree.sh feature-x -c --base origin/main
 ```
 
