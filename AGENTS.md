@@ -23,6 +23,7 @@
 
 - Validation relies on the host project's tooling: prettier, eslint, TypeScript, knip, and unit tests invoked through npm scripts.
 - Keep tests colocated with the project that consumes these utilities; verify `npm run test:unit` passes before pushing.
+- Tests for the scripts of this repository are Bash files in `tests/`, named after the script. They make a temporary repository and do not need npm. After you change a script, run its test (for example `bash tests/clear-empty-worktree-dirs.sh`).
 - Pre-push failures drop logs in `/tmp/` (e.g., `format_output_<timestamp>.log`); inspect them via the interactive viewer or `less`.
 
 ## Commit & Pull Request Guidelines
