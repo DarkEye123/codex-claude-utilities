@@ -177,4 +177,4 @@ If formatting introduces new changes in files that are part of the push, the hoo
 
 ## Contributing
 
-Test script changes locally, verify the documented commands still match `--help` output and observed behavior, and open a pull request with the script changes and README updates together.
+Test script changes locally, run the matching test in `tests/` when one exists (for example `bash tests/clear-empty-worktree-dirs.sh`), verify the documented commands still match `--help` output and observed behavior, and open a pull request with the script changes and README updates together.
