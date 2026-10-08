@@ -16,7 +16,8 @@ declare -a prune=()
 while IFS= read -r line; do
   [[ "$line" == worktree\ * ]] || continue
   wt="$(cd "${line#worktree }" 2>/dev/null && pwd -P)" || continue
-  prune+=(-path "$wt" -prune -o)
+  # -path takes a glob pattern; escape it so the path matches literally.
+  prune+=(-path "$(printf '%s' "$wt" | sed 's/[][\\*?]/\\&/g')" -prune -o)
 done <<<"$worktree_list"
 
 # -delete implies -depth, which disables -prune, so remove one level of empty directories per pass.

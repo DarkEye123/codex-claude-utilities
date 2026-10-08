@@ -20,15 +20,17 @@ fail() {
 git init -q "$TMP/sub"
 git -C "$TMP/sub" commit -q --allow-empty -m init
 
-git init -q "$TMP/repo"
-cd "$TMP/repo"
+# The glob characters check that find -path matches the worktree path literally.
+REPO="$TMP/repo [1] *?\\x"
+git init -q "$REPO"
+cd "$REPO"
 echo worktrees/ >.gitignore
 git submodule -q add "$TMP/sub" utilities/sub 2>/dev/null
 git add -A
 git commit -q -m init
 
 # Add the active worktree through a symlink: git and find must agree on its path.
-ln -s "$TMP/repo" "$TMP/link"
+ln -s "$REPO" "$TMP/link"
 git -C "$TMP/link" worktree add -q worktrees/fix/active -b active
 mkdir worktrees/fix/active/empty-dir
 git worktree add -q worktrees/gone/x -b gone
@@ -40,7 +42,7 @@ status_before="$(git -C worktrees/fix/active status --short)"
 
 cd "$TMP/link"
 bash "$SCRIPT"
-cd "$TMP/repo"
+cd "$REPO"
 
 [[ -d worktrees/fix/active/utilities/sub ]] || fail "deleted the submodule directory of an active worktree"
 [[ -d worktrees/fix/active/empty-dir ]] || fail "deleted an empty directory inside an active worktree"
