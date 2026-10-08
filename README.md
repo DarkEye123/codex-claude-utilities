@@ -137,6 +137,8 @@ bash clear-worktrees.sh --match missing-remote-merged --dry-run --report worktre
 
 Deletes empty directories under `./worktrees` from the bottom up. This is useful after removing nested worktrees or after `git worktree prune` leaves empty parent directories behind. The script exits with an error if `./worktrees` does not exist.
 
+The script does not go into a worktree that `git worktree list` shows. Thus it keeps the empty directories that Git tracks in an active worktree, for example an uninitialized submodule.
+
 ```
 $ bash clear-empty-worktree-dirs.sh
 ```
