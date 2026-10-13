@@ -86,8 +86,8 @@ FORMAT_PUSHED_CHANGES_FILE=""
 
 echo "🚀 Running comprehensive pre-push validation..."
 
-# Step 1: Run all validation in parallel (format, lint, TypeScript, knip, unit tests)
-echo "📋 Step 1: Running format, lint, TypeScript check, knip, and unit tests in parallel..."
+# Step 1: Run all validation in parallel (format, lint, TypeScript, knip, unit and integration tests)
+echo "📋 Step 1: Running format, lint, TypeScript check, knip, unit and integration tests in parallel..."
 
 # Generate timestamp for unique log files
 TIMESTAMP=$(date +%s)
@@ -98,6 +98,7 @@ ESLINT_LOG="/tmp/eslint_output_$TIMESTAMP.log"
 CHECK_LOG="/tmp/check_output_$TIMESTAMP.log"
 KNIP_LOG="/tmp/knip_output_$TIMESTAMP.log"
 TEST_LOG="/tmp/unit_test_output_$TIMESTAMP.log"
+INTEGRATION_LOG="/tmp/integration_test_output_$TIMESTAMP.log"
 
 # Run format with only changed files output, lint, check, knip, and tests in parallel
 npm run format > "$FORMAT_LOG" 2>&1 &
@@ -116,8 +117,17 @@ KNIP_PID=$!
 FORCE_COLOR=1 npm run test:unit > "$TEST_LOG" 2>&1 &
 TEST_PID=$!
 
-# Poll for parallel process completion with real-time progress indicators
 TOTAL_PROCESSES=5
+INTEGRATION_RESULT=0
+
+# Integration tests are optional: not every host project defines the script.
+if grep -q '"test:integration"' package.json; then
+  FORCE_COLOR=1 npm run test:integration > "$INTEGRATION_LOG" 2>&1 &
+  INTEGRATION_PID=$!
+  TOTAL_PROCESSES=6
+fi
+
+# Poll for parallel process completion with real-time progress indicators
 COMPLETED=0
 
 echo "⏳ Waiting for processes to complete... (0/$TOTAL_PROCESSES)"
@@ -206,6 +216,15 @@ while [ $COMPLETED -lt $TOTAL_PROCESSES ]; do
     COMPLETED=$((COMPLETED + 1))
     echo "✓ Unit tests completed ($COMPLETED/$TOTAL_PROCESSES)"
   fi
+
+  # Check integration test process
+  if [ -n "$INTEGRATION_PID" ] && ! kill -0 $INTEGRATION_PID 2>/dev/null; then
+    wait $INTEGRATION_PID
+    INTEGRATION_RESULT=$?
+    INTEGRATION_PID=""
+    COMPLETED=$((COMPLETED + 1))
+    echo "✓ Integration tests completed ($COMPLETED/$TOTAL_PROCESSES)"
+  fi
   
   # Brief sleep to avoid CPU spinning
   [ $COMPLETED -lt $TOTAL_PROCESSES ] && sleep 0.1
@@ -258,6 +277,12 @@ if [ $TEST_RESULT -ne 0 ]; then
   FAILED_CHECKS+=("test")
   FAILED_NAMES+=("Unit tests")
   FAILED_LOGS+=("$TEST_LOG")
+fi
+
+if [ $INTEGRATION_RESULT -ne 0 ]; then
+  FAILED_CHECKS+=("integration")
+  FAILED_NAMES+=("Integration tests")
+  FAILED_LOGS+=("$INTEGRATION_LOG")
 fi
 
 TERMINAL_DEVICE=""
@@ -380,6 +405,7 @@ echo "   ✅ Code formatting"
 echo "   ✅ Linting (ESLint)"  
 echo "   ✅ TypeScript compilation"
 echo "   ✅ Unit tests"
+[ $TOTAL_PROCESSES -eq 6 ] && echo "   ✅ Integration tests"
 echo "   ✅ Unused code/dependency detection (knip)"
 echo ""
 
