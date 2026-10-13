@@ -25,12 +25,13 @@ Runs before every `git push` and performs comprehensive code validation:
 **Step 2: Testing**
 
 4. **🧪 Unit tests** - Runs all unit tests with Vitest
+5. **🧪 Integration tests** - Runs `npm run test:integration` when the host `package.json` defines it
 
 **Step 3: Code Health**
 
-5. **🧹 Knip check** - Unused dependencies & dead code detection
+6. **🧹 Knip check** - Unused dependencies & dead code detection
 
-If any check fails, the push is blocked until issues are resolved. The core validation runs in parallel for faster execution.
+If any check fails, the push is blocked until issues are resolved. All checks run in parallel for faster execution.
 
 ## In Consuming Repositories
 

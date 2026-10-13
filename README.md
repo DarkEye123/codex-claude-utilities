@@ -163,7 +163,7 @@ $ bash path/to/codex-claude-utilities/hooks/install.sh
 
 ### hooks/pre-push
 
-Native Git pre-push hook that reads the refs being pushed, computes the files reachable from commits that are not yet on the destination remote, and excludes paths under `worktrees/`. It then runs `npm run format`, `npm run lint`, `npm run check`, `npm run knip`, and `npm run test:unit` in parallel, writing logs to `/tmp/*_output_<timestamp>.log`.
+Native Git pre-push hook that reads the refs being pushed, computes the files reachable from commits that are not yet on the destination remote, and excludes paths under `worktrees/`. It then runs `npm run format`, `npm run lint`, `npm run check`, `npm run knip`, and `npm run test:unit` in parallel, writing logs to `/tmp/*_output_<timestamp>.log`. When the host `package.json` defines `test:integration`, the hook also runs `npm run test:integration` in parallel with the other checks.
 
 If formatting introduces new changes in files that are part of the push, the hook fails even when `npm run format` exits successfully. Single failures open the relevant log in `less` when a TTY is available; multiple failures show a small menu, and non-interactive environments print logs directly.
 

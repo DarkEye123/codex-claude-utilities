@@ -12,6 +12,7 @@
 - `bash create_agents.sh --help` — review options for linking `AGENTS.md`, `CLAUDE.md` and `GEMINI.md` across a tree.
 - `bash create_worktree.sh <worktree> [branch] [flags]` — create a worktree and copy top-level `.env*` files; use `-c` to clone `node_modules`.
 - The `pre-push` hook runs `npm run format`, `npm run lint`, `npm run check`, `npm run knip`, and `npm run test:unit`; ensure these scripts exist in the host project.
+- The hook also runs `npm run test:integration`, but only when the host `package.json` defines this script.
 
 ## Coding Style & Naming Conventions
 
